@@ -14,6 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+
+/*
+OVERALL:
+Two important line:
+1. command := app.NewSchedulerCommand()
+2. command.Execute()
+ */
+
+
 package main
 
 import (
@@ -33,6 +42,7 @@ import (
 )
 
 func main() {
+	// runSchedulerCmd is the entry
 	if err := runSchedulerCmd(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
@@ -40,13 +50,25 @@ func main() {
 }
 
 func runSchedulerCmd() error {
+	//why??????? TODO
 	rand.Seed(time.Now().UnixNano())
 
+	/*
+	pflag works on command line, SetNormalizeFunc do the normalize on command : [getURL to geturl] so that the command can be recognized,
+	WordSepNormalizeFunc changes all flags that contain "_" separators
+	*/
 	pflag.CommandLine.SetNormalizeFunc(cliflag.WordSepNormalizeFunc)
 
+	/*
+	NewSchedulerCommand creates a *cobra.Command object with default parameters and registryOptions
+	what is cobra.Command? == used to write command line tools. ps: https://segmentfault.com/a/1190000023382214
+    ENTRY1: important
+	 */
 	command := app.NewSchedulerCommand()
 
 	logs.InitLogs()
+
+	// defer will execute before the func return
 	defer logs.FlushLogs()
 
 	if err := command.Execute(); err != nil {

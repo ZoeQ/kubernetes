@@ -15,6 +15,14 @@ limitations under the License.
 */
 
 // Package app implements a Server object for running the scheduler.
+
+/*
+OVERALL:
+1. NewSchedulerCommand return the scheduler cmd with default para and registryOptions  TODO not clear
+2. runCommand using NewSchedulerCommand returned value as para. And call Run in the end
+3. Run
+*/
+
 package app
 
 import (
@@ -59,18 +67,30 @@ import (
 )
 
 // Option configures a framework.Registry.
+// plugins
 type Option func(runtime.Registry) error
 
 // NewSchedulerCommand creates a *cobra.Command object with default parameters and registryOptions
 func NewSchedulerCommand(registryOptions ...Option) *cobra.Command {
+
+	/*
+		options TODO  return the default configuration of kube-scheduler?
+	*/
 	opts, err := options.NewOptions()
 	if err != nil {
 		klog.Fatalf("unable to initialize command options: %v", err)
 	}
 
+	// what are flags? TODO
 	namedFlagSets := opts.Flags()
+
+	/*
+		define command
+	*/
 	cmd := &cobra.Command{
 		Use: "kube-scheduler",
+
+		//shown in the 'help <this-command>' output.
 		Long: `The Kubernetes scheduler is a control plane process which assigns
 Pods to Nodes. The scheduler determines which Nodes are valid placements for
 each Pod in the scheduling queue according to constraints and available
@@ -79,6 +99,8 @@ suitable Node. Multiple different schedulers may be used within a cluster;
 kube-scheduler is the reference implementation.
 See [scheduling](https://kubernetes.io/docs/concepts/scheduling-eviction/)
 for more information about scheduling and the kube-scheduler component.`,
+
+		// Run but returns an error.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := opts.Complete(&namedFlagSets); err != nil {
 				return err
@@ -99,6 +121,8 @@ for more information about scheduling and the kube-scheduler component.`,
 			return nil
 		},
 	}
+
+	//Flags return the complete FlagSet that applies
 	fs := cmd.Flags()
 	verflag.AddFlags(namedFlagSets.FlagSet("global"))
 	globalflag.AddGlobalFlags(namedFlagSets.FlagSet("global"), cmd.Name())
@@ -116,14 +140,33 @@ for more information about scheduling and the kube-scheduler component.`,
 
 // runCommand runs the scheduler.
 func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Option) error {
+
+	// check if the -version flag was passed
 	verflag.PrintAndExitIfRequested()
 	cliflag.PrintFlags(cmd.Flags())
 
+	/*
+	context.Background(): return a non-nil and empty context,It is typically used by the main function,
+	initialization, and tests, and as the top-level Context for incoming requests.
+
+	Package context defines the Context type, which carries deadlines,
+	cancellation signals, and other request-scoped values across API boundaries
+	and between processes.
+	TODO: what?
+	Incoming requests to a server should create a Context, and outgoing
+	calls to servers should accept a Context.
+	*/
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// TODO: catch the stop signal? to stop channel?
 	go func() {
 		stopCh := server.SetupSignalHandler()
+
+		// TODO: to where? who?
 		<-stopCh
+
+		// A CancelFunc tells an operation to abandon its work. TODO: so it will stop this go work or the entire work (the whole scheduler)?
 		cancel()
 	}()
 
@@ -135,6 +178,7 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 	return Run(ctx, cc, sched)
 }
 
+// TODO: What is the difference between run the scheduler and executes the scheduler?
 // Run executes the scheduler based on the given configuration. It only returns on error or when context is done.
 func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *scheduler.Scheduler) error {
 	// To help debugging, immediately log version
