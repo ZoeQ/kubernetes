@@ -18,7 +18,7 @@ limitations under the License.
 
 /*
 OVERALL:
-1. NewSchedulerCommand return the scheduler cmd with default para and registryOptions  TODO not clear
+1. NewSchedulerCommand return the scheduler cmd with default para and registryOptions  TODO not clear WHY?
 2. runCommand using NewSchedulerCommand returned value as para. And call Run in the end
 3. Run
 */
@@ -74,14 +74,14 @@ type Option func(runtime.Registry) error
 func NewSchedulerCommand(registryOptions ...Option) *cobra.Command {
 
 	/*
-		options TODO  return the default configuration of kube-scheduler?
+		options TODO  return the default configuration of kube-scheduler? WHY?
 	*/
 	opts, err := options.NewOptions()
 	if err != nil {
 		klog.Fatalf("unable to initialize command options: %v", err)
 	}
 
-	// what are flags? TODO
+	// what are flags? TODO WHY?
 	namedFlagSets := opts.Flags()
 
 	/*
@@ -152,21 +152,21 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 	Package context defines the Context type, which carries deadlines,
 	cancellation signals, and other request-scoped values across API boundaries
 	and between processes.
-	TODO: what?
+	TODO: what? WHY?
 	Incoming requests to a server should create a Context, and outgoing
 	calls to servers should accept a Context.
 	*/
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// TODO: catch the stop signal? to stop channel?
+	// TODO: catch the stop signal? to stop channel? WHY?
 	go func() {
 		stopCh := server.SetupSignalHandler()
 
-		// TODO: to where? who?
+		// TODO: to where? who? WHY?
 		<-stopCh
 
-		// A CancelFunc tells an operation to abandon its work. TODO: so it will stop this go work or the entire work (the whole scheduler)?
+		// A CancelFunc tells an operation to abandon its work. TODO: so it will stop this go work or the entire work (the whole scheduler)? WHY?
 		cancel()
 	}()
 
@@ -178,14 +178,16 @@ func runCommand(cmd *cobra.Command, opts *options.Options, registryOptions ...Op
 	return Run(ctx, cc, sched)
 }
 
-// TODO: What is the difference between run the scheduler and executes the scheduler?
+// Run TODO: What is the difference between run the scheduler and executes the scheduler? WHY?
 // Run executes the scheduler based on the given configuration. It only returns on error or when context is done.
 func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *scheduler.Scheduler) error {
 	// To help debugging, immediately log version
 	klog.InfoS("Starting Kubernetes Scheduler", "version", version.Get())
 
 	// Configz registration.
+	// New creates a Config object with the given name.
 	if cz, err := configz.New("componentconfig"); err == nil {
+		// ComponentConfig is the scheduler server's configuration object.
 		cz.Set(cc.ComponentConfig)
 	} else {
 		return fmt.Errorf("unable to register configz: %s", err)
@@ -228,7 +230,7 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 	}
 	if cc.SecureServing != nil {
 		handler := buildHandlerChain(newHealthzHandler(&cc.ComponentConfig, cc.InformerFactory, isLeader, false, checks...), cc.Authentication.Authenticator, cc.Authorization.Authorizer)
-		// TODO: handle stoppedCh returned by c.SecureServing.Serve
+		// TODO: handle stoppedCh returned by c.SecureServing.Serve WHY?
 		if _, err := cc.SecureServing.Serve(handler, 0, ctx.Done()); err != nil {
 			// fail early for secure handlers, removing the old error loop from above
 			return fmt.Errorf("failed to start secure server: %v", err)
@@ -272,6 +274,8 @@ func Run(ctx context.Context, cc *schedulerserverconfig.CompletedConfig, sched *
 
 	// Leader election is disabled, so runCommand inline until done.
 	close(waitingForLeader)
+
+	// start the actual schedule
 	sched.Run(ctx)
 	return fmt.Errorf("finished without leader elect")
 }

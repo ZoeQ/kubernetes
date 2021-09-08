@@ -66,12 +66,17 @@ const (
 // Scheduler watches for new unscheduled pods. It attempts to find
 // nodes that they fit on and writes bindings back to the api server.
 type Scheduler struct {
+
+	// TODO: so how to make changes via SchedulerCache WHY?
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
 	SchedulerCache internalcache.Cache
 
 	Algorithm ScheduleAlgorithm
 
+
+	// Extenders is an interface for external processes to influence scheduling decisions made by Kubernetes.
+	// TODO: What is the detailed definition of extender WHY?
 	Extenders []framework.Extender
 
 	// NextPod should be a function that blocks until the next pod
@@ -369,21 +374,33 @@ func initPolicyFromConfigMap(client clientset.Interface, policyRef *schedulerapi
 
 // Run begins watching and scheduling. It starts scheduling and blocked until the context is done.
 func (sched *Scheduler) Run(ctx context.Context) {
+
+	// Run starts the goroutines managing the queue.
 	sched.SchedulingQueue.Run()
+
+	// UntilWithContext is a syntax sugar of JitterUntilWithContext and JitterUntilWithContext loops until context is done, running f every period.
 	wait.UntilWithContext(ctx, sched.scheduleOne, 0)
 	sched.SchedulingQueue.Close()
 }
 
-// recordSchedulingFailure records an event for the pod that indicates the
-// pod has failed to schedule. Also, update the pod condition and nominated node name if set.
+/*
+recordSchedulingFailure records an event for the pod that indicates the
+pod has failed to schedule. Also, update the pod condition and nominated node name if set.
+QueuedPodInfo is a Pod wrapper with additional information related to the pod's status in the scheduling queue,
+such as the timestamp when it's added to the queue.
+ */
 func (sched *Scheduler) recordSchedulingFailure(fwk framework.Framework, podInfo *framework.QueuedPodInfo, err error, reason string, nominatedNode string) {
 	sched.Error(podInfo, err)
 
+
+	// TODO: WHY?
 	// Update the scheduling queue with the nominated pod information. Without
 	// this, there would be a race condition between the next scheduling cycle
 	// and the time the scheduler receives a Pod Update for the nominated pod.
 	// Here we check for nil only for tests.
 	if sched.SchedulingQueue != nil {
+
+		// Assume the pod will be scheduled on the node, so add the node name on the pod
 		sched.SchedulingQueue.AddNominatedPod(podInfo.PodInfo, nominatedNode)
 	}
 
@@ -410,6 +427,7 @@ func truncateMessage(message string) string {
 	return message[:max-len(suffix)] + suffix
 }
 
+// updatePod: update the pod.Status.NominatedNodeName, TODO: WHY? - because the even define the NominatedNodeName, the system cannot sure the pod can be scheduled on the node actually
 func updatePod(client clientset.Interface, pod *v1.Pod, condition *v1.PodCondition, nominatedNode string) error {
 	klog.V(3).InfoS("Updating pod condition", "pod", klog.KObj(pod), "conditionType", condition.Type, "conditionStatus", condition.Status, "conditionReason", condition.Reason)
 	podStatusCopy := pod.Status.DeepCopy()
@@ -426,7 +444,7 @@ func updatePod(client clientset.Interface, pod *v1.Pod, condition *v1.PodConditi
 }
 
 // assume signals to the cache that a pod is already in the cache, so that binding can be asynchronous.
-// assume modifies `assumed`.
+// assume modifies `assumed`. sched.assume： 对于调度成功的pod做假设，给该pod的NodeName添加了调度的SuggestHost，写入到cache中，后续才是真正的bind，因为bind比较耗时，后面异步去做
 func (sched *Scheduler) assume(assumed *v1.Pod, host string) error {
 	// Optimistically assume that the binding will succeed and send it to apiserver
 	// in the background.
@@ -509,6 +527,8 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 		klog.ErrorS(err, "Error occurred")
 		return
 	}
+
+	// skipPodSchedule returns true if we could skip scheduling the pod for specified cases.
 	if sched.skipPodSchedule(fwk, pod) {
 		return
 	}

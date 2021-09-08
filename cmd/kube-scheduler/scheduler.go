@@ -50,7 +50,7 @@ func main() {
 }
 
 func runSchedulerCmd() error {
-	//why??????? TODO
+	// TODO WHY?
 	rand.Seed(time.Now().UnixNano())
 
 	/*
