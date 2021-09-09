@@ -452,6 +452,7 @@ func (sched *Scheduler) assume(assumed *v1.Pod, host string) error {
 	// immediately.
 	assumed.Spec.NodeName = host
 
+	// AssumePod assumes a pod scheduled and aggregates the pod's information into its node.
 	if err := sched.SchedulerCache.AssumePod(assumed); err != nil {
 		klog.ErrorS(err, "Scheduler cache AssumePod failed")
 		return err
@@ -489,9 +490,16 @@ func (sched *Scheduler) bind(ctx context.Context, fwk framework.Framework, assum
 // TODO(#87159): Move this to a Plugin.
 func (sched *Scheduler) extendersBinding(pod *v1.Pod, node string) (bool, error) {
 	for _, extender := range sched.Extenders {
+
+		/*
+		IsBinder(): returns whether this extender is configured for the Bind method.
+		IsInterested(pod): eturns true if at least one extended resource requested by this pod is managed by this extender.
+		 */
 		if !extender.IsBinder() || !extender.IsInterested(pod) {
 			continue
 		}
+
+		// Bind delegates the action of binding a pod to a node to the extender.
 		return true, extender.Bind(&v1.Binding{
 			ObjectMeta: metav1.ObjectMeta{Namespace: pod.Namespace, Name: pod.Name, UID: pod.UID},
 			Target:     v1.ObjectReference{Kind: "Node", Name: node},
@@ -501,6 +509,8 @@ func (sched *Scheduler) extendersBinding(pod *v1.Pod, node string) (bool, error)
 }
 
 func (sched *Scheduler) finishBinding(fwk framework.Framework, assumed *v1.Pod, targetNode string, err error) {
+
+	// FinishBinding signals that cache for assumed pod can be expired
 	if finErr := sched.SchedulerCache.FinishBinding(assumed); finErr != nil {
 		klog.ErrorS(finErr, "Scheduler cache FinishBinding failed")
 	}
@@ -537,6 +547,8 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 
 	// Synchronously attempt to find a fit for the pod.
 	start := time.Now()
+
+	// NewCycleState initializes a new CycleState and returns its pointer.
 	state := framework.NewCycleState()
 	state.SetRecordPluginMetrics(rand.Intn(100) < pluginMetricsSamplePercent)
 	// Initialize an empty podsToActivate struct, which will be filled up by plugins or stay empty.
