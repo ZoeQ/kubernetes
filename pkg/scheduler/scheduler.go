@@ -376,6 +376,7 @@ func initPolicyFromConfigMap(client clientset.Interface, policyRef *schedulerapi
 func (sched *Scheduler) Run(ctx context.Context) {
 
 	// Run starts the goroutines managing the queue.
+
 	sched.SchedulingQueue.Run()
 
 	// UntilWithContext is a syntax sugar of JitterUntilWithContext and JitterUntilWithContext loops until context is done, running f every period.
@@ -560,7 +561,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 	scheduleResult, err := sched.Algorithm.Schedule(schedulingCycleCtx, sched.Extenders, fwk, state, pod)
 	if err != nil {
 		// Schedule() may have failed because the pod would not fit on any host, so we try to
-		// preempt, with the expectation that the next time the pod is tried for scheduling it
+		// preempt 抢占, with the expectation that the next time the pod is tried for scheduling it
 		// will fit due to the preemption. It is also possible that a different pod will schedule
 		// into the resources that were preempted, but this is harmless.
 		nominatedNode := ""

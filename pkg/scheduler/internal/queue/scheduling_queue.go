@@ -125,23 +125,32 @@ func NominatedNodeName(pod *v1.Pod) string {
 // pods that are already tried and are determined to be unschedulable. The latter
 // is called unschedulableQ. The third queue holds pods that are moved from
 // unschedulable queues and will be moved to active queue when backoff are completed.
+// PriorityQueue是具体的实现
+// 队列的头是等待调度的pod里优先级最高的
+// 包括三个子队列
 type PriorityQueue struct {
 	// PodNominator abstracts the operations to maintain nominated Pods.
+	// 存储、设置调度的提名信息，其实就是调度的结果：pod和node的对应关系
 	framework.PodNominator
 
+	// 外部控制队列的channel
 	stop  chan struct{}
 	clock util.Clock
 
-	// pod initial backoff duration.
+	// pod initial backoff duration. backoff pod 初始的等待重新调度时间
 	podInitialBackoffDuration time.Duration
-	// pod maximum backoff duration.
+
+	// pod maximum backoff duration. backoff pod 最大的等待重新调度的时间
 	podMaxBackoffDuration time.Duration
 
 	lock sync.RWMutex
+
+	// 并发场景下，控制pop的阻塞
 	cond sync.Cond
 
 	// activeQ is heap structure that scheduler actively looks at to find pods to
 	// schedule. Head of heap is the highest priority pod.
+	// 阻塞队列
 	activeQ *heap.Heap
 	// podBackoffQ is a heap ordered by backoff expiry. Pods which have completed backoff
 	// are popped from this heap before the scheduler looks at activeQ
@@ -150,6 +159,7 @@ type PriorityQueue struct {
 	unschedulableQ *UnschedulablePodsMap
 	// schedulingCycle represents sequence number of scheduling cycle and is incremented
 	// when a pod is popped.
+	// 一个计数器，每次pop一个pod，自增一次
 	schedulingCycle int64
 	// moveRequestCycle caches the sequence number of scheduling cycle when we
 	// received a move request. Unschedulable pods in and before this scheduling
@@ -161,6 +171,7 @@ type PriorityQueue struct {
 
 	// closed indicates that the queue is closed.
 	// It is mainly used to let Pop() exit its control loop while waiting for an item.
+	// 控制队列的开关
 	closed bool
 
 	nsLister listersv1.NamespaceLister
@@ -273,8 +284,11 @@ func NewPriorityQueue(
 }
 
 // Run starts the goroutine to pump from podBackoffQ to activeQ
+// PriorityQueue的RUN方法
 func (p *PriorityQueue) Run() {
+	// 每隔1秒，检测backoffQ里是否有pod可以被放进activeQ里
 	go wait.Until(p.flushBackoffQCompleted, 1.0*time.Second, p.stop)
+	//每隔30秒，检测unschedulepodQ里是否有pod可以被放进activeQ里
 	go wait.Until(p.flushUnschedulableQLeftover, 30*time.Second, p.stop)
 }
 
@@ -711,6 +725,7 @@ func (npm *nominator) NominatedPodsForNode(nodeName string) []*framework.PodInfo
 	return pods
 }
 
+// backoffQ也是一个优先队列，那么它的默认比较方法如下所示，简单粗暴，根据失败的时间来排序
 func (p *PriorityQueue) podsCompareBackoffCompleted(podInfo1, podInfo2 interface{}) bool {
 	pInfo1 := podInfo1.(*framework.QueuedPodInfo)
 	pInfo2 := podInfo2.(*framework.QueuedPodInfo)
@@ -757,7 +772,7 @@ func updatePod(oldPodInfo interface{}, newPod *v1.Pod) *framework.QueuedPodInfo 
 }
 
 // UnschedulablePodsMap holds pods that cannot be scheduled. This data structure
-// is used to implement unschedulableQ.
+// is used to implement unschedulableQ. 存储暂时无法被调度的pod信息
 type UnschedulablePodsMap struct {
 	// podInfoMap is a map key by a pod's full-name and the value is a pointer to the QueuedPodInfo.
 	podInfoMap map[string]*framework.QueuedPodInfo
@@ -804,6 +819,7 @@ func (u *UnschedulablePodsMap) clear() {
 }
 
 // newUnschedulablePodsMap initializes a new object of UnschedulablePodsMap.
+// 不可调度队列的构造函数，看得出来，keyfunc里获取pod的全名
 func newUnschedulablePodsMap(metricRecorder metrics.MetricRecorder) *UnschedulablePodsMap {
 	return &UnschedulablePodsMap{
 		podInfoMap:     make(map[string]*framework.QueuedPodInfo),
