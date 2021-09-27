@@ -50,7 +50,7 @@ func main() {
 }
 
 func runSchedulerCmd() error {
-	// TODO WHY?
+	// 设置系统随机数引擎 TODO WHY?
 	rand.Seed(time.Now().UnixNano())
 
 	/*

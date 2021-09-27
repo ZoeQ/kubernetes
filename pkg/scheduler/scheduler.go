@@ -230,6 +230,7 @@ func New(client clientset.Interface,
 		stopEverything = wait.NeverStop
 	}
 
+	// 默认的调度器选项
 	options := defaultSchedulerOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -244,8 +245,11 @@ func New(client clientset.Interface,
 		}
 		options.profiles = cfg.Profiles
 	}
+
+	// 初始化调度缓存
 	schedulerCache := internalcache.New(30*time.Second, stopEverything)
 
+	// registry是一个字典，里面存放了插件名与插件的工厂方法
 	registry := frameworkplugins.NewInTreeRegistry()
 	if err := registry.Merge(options.frameworkOutOfTreeRegistry); err != nil {
 		return nil, err
@@ -254,6 +258,7 @@ func New(client clientset.Interface,
 	snapshot := internalcache.NewEmptySnapshot()
 	clusterEventMap := make(map[framework.ClusterEvent]sets.String)
 
+	// 基于配置 创建configurator实例
 	configurator := &Configurator{
 		componentConfigVersion:   options.componentConfigVersion,
 		client:                   client,
@@ -298,7 +303,7 @@ func New(client clientset.Interface,
 			}
 		}
 		// Set extenders on the configurator now that we've decoded the policy
-		// In this case, c.extenders should be nil since we're using a policy (and therefore not componentconfig,
+		// In this case, c.extenders should be nil since we're using a policy (and therefore not component config,
 		// which would have set extenders in the above instantiation of Configurator from CC options)
 		configurator.extenders = policy.Extenders
 		sc, err := configurator.createFromPolicy(*policy)
@@ -320,6 +325,7 @@ func New(client clientset.Interface,
 		dynInformerFactory = dynamicinformer.NewFilteredDynamicSharedInformerFactory(dynClient, 0, v1.NamespaceAll, nil)
 	}
 
+	// 这一步启动所有的事件监听
 	addAllEventHandlers(sched, informerFactory, dynInformerFactory, unionedGVKs(clusterEventMap))
 	return sched, nil
 }
@@ -376,7 +382,6 @@ func initPolicyFromConfigMap(client clientset.Interface, policyRef *schedulerapi
 func (sched *Scheduler) Run(ctx context.Context) {
 
 	// Run starts the goroutines managing the queue.
-
 	sched.SchedulingQueue.Run()
 
 	// UntilWithContext is a syntax sugar of JitterUntilWithContext and JitterUntilWithContext loops until context is done, running f every period.
@@ -531,6 +536,8 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 		return
 	}
 	pod := podInfo.Pod
+
+	// fwk, ok := sched.Profiles[pod.Spec.SchedulerName]，这个profile可以对scheduler进行自定义配置
 	fwk, err := sched.frameworkForPod(pod)
 	if err != nil {
 		// This shouldn't happen, because we only accept for scheduling the pods
@@ -595,7 +602,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 		return
 	}
 	metrics.SchedulingAlgorithmLatency.Observe(metrics.SinceInSeconds(start))
-	// Tell the cache to assume that a pod now is running on a given node, even though it hasn't been bound yet.
+	// Tell the cache to assume that a pod now is running on a given node, even though it hasn't been bound yet. TODO?WHY? 怎么告诉本地缓存的？
 	// This allows us to keep scheduling without waiting on binding to occur.
 	assumedPodInfo := podInfo.DeepCopy()
 	assumedPod := assumedPodInfo.Pod
@@ -613,6 +620,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 	}
 
 	// Run the Reserve method of reserve plugins.
+	// reserve: 是一个信息扩展点，当资源已经被预留给pod时，会通知插件，这些插件还实现了unreserve接口，在reserve期间或之后出现故障时调用
 	if sts := fwk.RunReservePluginsReserve(schedulingCycleCtx, state, assumedPod, scheduleResult.SuggestedHost); !sts.IsSuccess() {
 		metrics.PodScheduleError(fwk.ProfileName(), metrics.SinceInSeconds(start))
 		// trigger un-reserve to clean up state associated with the reserved Pod
@@ -624,7 +632,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 		return
 	}
 
-	// Run "permit" plugins.
+	// Run "permit" plugins. 阻止或者延迟pod绑定
 	runPermitStatus := fwk.RunPermitPlugins(schedulingCycleCtx, state, assumedPod, scheduleResult.SuggestedHost)
 	if runPermitStatus.Code() != framework.Wait && !runPermitStatus.IsSuccess() {
 		var reason string

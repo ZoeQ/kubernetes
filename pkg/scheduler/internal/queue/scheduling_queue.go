@@ -757,6 +757,7 @@ func (p *PriorityQueue) getBackoffTime(podInfo *framework.QueuedPodInfo) time.Ti
 func (p *PriorityQueue) calculateBackoffDuration(podInfo *framework.QueuedPodInfo) time.Duration {
 	duration := p.podInitialBackoffDuration
 	for i := 1; i < podInfo.Attempts; i++ {
+		// 2倍数增长，超过最大值就以最大值为准
 		duration = duration * 2
 		if duration > p.podMaxBackoffDuration {
 			return p.podMaxBackoffDuration
@@ -775,6 +776,7 @@ func updatePod(oldPodInfo interface{}, newPod *v1.Pod) *framework.QueuedPodInfo 
 // is used to implement unschedulableQ. 存储暂时无法被调度的pod信息
 type UnschedulablePodsMap struct {
 	// podInfoMap is a map key by a pod's full-name and the value is a pointer to the QueuedPodInfo.
+	// // podInfoMap 是一个map，他的key是pod的full-name，值是指向pod信息的指针
 	podInfoMap map[string]*framework.QueuedPodInfo
 	keyFunc    func(*v1.Pod) string
 	// metricRecorder updates the counter when elements of an unschedulablePodsMap
