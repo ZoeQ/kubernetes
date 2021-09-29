@@ -190,6 +190,8 @@ func (ev *Evaluator) findCandidates(ctx context.Context, pod *v1.Pod, m framewor
 	if len(allNodes) == 0 {
 		return nil, nil, framework.NewStatus(framework.Error, "no nodes available")
 	}
+
+	// 返回预选阶段失败的并且可能可以通过remove pod来满足调度的节点
 	potentialNodes, unschedulableNodeStatus := nodesWherePreemptionMightHelp(allNodes, m)
 	if len(potentialNodes) == 0 {
 		klog.V(3).InfoS("Preemption will not help schedule pod on any node", "pod", klog.KObj(pod))
