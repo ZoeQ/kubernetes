@@ -32,19 +32,23 @@ import (
 
 // rollback the deployment to the specified revision. In any case cleanup the rollback spec.
 func (dc *DeploymentController) rollback(d *apps.Deployment, rsList []*apps.ReplicaSet) error {
+	// 1、获取 newRS 和 oldRSs
 	newRS, allOldRSs, err := dc.getAllReplicaSetsAndSyncRevision(d, rsList, true)
 	if err != nil {
 		return err
 	}
 
 	allRSs := append(allOldRSs, newRS)
+	// 2、调用 getRollbackTo 获取 rollback 的 revision
 	rollbackTo := getRollbackTo(d)
 	// If rollback revision is 0, rollback to the last revision
+	// 3、判断 revision 以及对应的 rs 是否存在，若 revision 为 0，则表示回滚到最新的版本
 	if rollbackTo.Revision == 0 {
 		if rollbackTo.Revision = deploymentutil.LastRevision(allRSs); rollbackTo.Revision == 0 {
 			// If we still can't find the last revision, gives up rollback
 			dc.emitRollbackWarningEvent(d, deploymentutil.RollbackRevisionNotFound, "Unable to find last revision.")
 			// Gives up rollback
+			// 4、清除回滚标志放弃回滚操作
 			return dc.updateDeploymentAndClearRollbackTo(d)
 		}
 	}
@@ -59,6 +63,7 @@ func (dc *DeploymentController) rollback(d *apps.Deployment, rsList []*apps.Repl
 			// rollback by copying podTemplate.Spec from the replica set
 			// revision number will be incremented during the next getAllReplicaSetsAndSyncRevision call
 			// no-op if the spec matches current deployment's podTemplate.Spec
+			// 5、调用 rollbackToTemplate 进行回滚操作
 			performedRollback, err := dc.rollbackToTemplate(d, rs)
 			if performedRollback && err == nil {
 				dc.emitRollbackNormalEvent(d, fmt.Sprintf("Rolled back deployment %q to revision %d", d.Name, rollbackTo.Revision))
@@ -76,8 +81,10 @@ func (dc *DeploymentController) rollback(d *apps.Deployment, rsList []*apps.Repl
 // cleans up the rollback spec so subsequent requeues of the deployment won't end up in here.
 func (dc *DeploymentController) rollbackToTemplate(d *apps.Deployment, rs *apps.ReplicaSet) (bool, error) {
 	performedRollback := false
+	// 1、比较 d.Spec.Template 和 rs.Spec.Template 是否相等
 	if !deploymentutil.EqualIgnoreHash(&d.Spec.Template, &rs.Spec.Template) {
 		klog.V(4).Infof("Rolling back deployment %q to template spec %+v", d.Name, rs.Spec.Template.Spec)
+		// 2、替换 d.Spec.Template
 		deploymentutil.SetFromReplicaSetTemplate(d, rs.Spec.Template)
 		// set RS (the old RS we'll rolling back to) annotations back to the deployment;
 		// otherwise, the deployment's current annotations (should be the same as current new RS) will be copied to the RS after the rollback.
@@ -90,6 +97,7 @@ func (dc *DeploymentController) rollbackToTemplate(d *apps.Deployment, rs *apps.
 		//
 		// If we don't copy the annotations back from RS to deployment on rollback, the Deployment will stay as {change-cause:edit},
 		// and new RS1 becomes {change-cause:edit} (copied from deployment after rollback), old RS2 {change-cause:edit}, which is not correct.
+		// 3、设置 annotation
 		deploymentutil.SetDeploymentAnnotationsTo(d, rs)
 		performedRollback = true
 	} else {
@@ -98,6 +106,7 @@ func (dc *DeploymentController) rollbackToTemplate(d *apps.Deployment, rs *apps.
 		dc.emitRollbackWarningEvent(d, deploymentutil.RollbackTemplateUnchanged, eventMsg)
 	}
 
+	// 4、更新 deployment 并清除回滚标志
 	return performedRollback, dc.updateDeploymentAndClearRollbackTo(d)
 }
 

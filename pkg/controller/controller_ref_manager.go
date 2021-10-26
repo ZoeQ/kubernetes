@@ -299,8 +299,8 @@ func NewReplicaSetControllerRefManager(
 // ClaimReplicaSets tries to take ownership of a list of ReplicaSets.
 //
 // It will reconcile the following:
-//   * Adopt orphans if the selector matches.
-//   * Release owned objects if the selector no longer matches.
+//   * Adopt orphans if the selector matches. 收养匹配的孤儿
+//   * Release owned objects if the selector no longer matches. 取消不匹配但是关联中的对象
 //
 // A non-nil error is returned if some form of reconciliation was attempted and
 // failed. Usually, controllers should try again later in case reconciliation
